@@ -3,60 +3,165 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   simple-node-api
   Sample SAM Template for simple-node-api
-  
-# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+# Parameters:
+#   StageName:
+#     Type: String
+#   CommitId:
+#     Type: String
+#   Issuer:
+#     Type: String
+#   Audience:
+#     Type: String
 Globals:
   Function:
     Timeout: 3
     Tracing: Active
-
+    AutoPublishAlias: live
+    # AutoPublishCodeSha256: !Ref CommitId
+    # DeploymentPreference:
+    #   Type: Canary10Percent10Minutes
+    Handler: app.lambdaHandler
+    Runtime: nodejs12.x
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref Database
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
 Resources:
-  GuestBookApi:
+  PostMessageLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/postMessage/
+      Policies:
+        - DynamoDBWritePolicy:
+            TableName: !Ref Database
+
+  PostMessageLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Sub "${PostMessageLambda.Alias}"
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*/POST/"
+
+  ListMessagesLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/listMessage/
+      Environment:
+        Variables:
+          KEY_ID: !Ref Key
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref Database
+        - KMSDecryptPolicy:
+            KeyId: !Ref Key
+        - KMSEncryptPolicy:
+            KeyId: !Ref Key
+
+  ListMessagesLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Sub "${ListMessagesLambda.Alias}"
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*/GET/"
+
+  DeleteMessageLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/listMessage/
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref Database
+
+  DeleteMessageLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Sub "${DeleteMessageLambda.Alias}"
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*/DELETE/"
+
+  Key:
+    Type: AWS::KMS::Key
+    Properties:
+      PendingWindowInDays: 7
+      KeyPolicy:
+        Id: KeyPolicy
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: kms:*
+            Resource: "*"
+
+  Api:
     Type: AWS::Serverless::HttpApi
     Properties:
+      CorsConfiguration:
+        AllowCredentials: true
+        AllowHeaders: "*"
+        AllowMethods:
+          - GET
+          - POST
+          - DELETE
+          - HEAD
+        AllowOrigins:
+          - https://*
+      DefaultRouteSettings:
+        DetailedMetricsEnabled: true
+        # LoggingLevel: INFO
+        # DataTraceEnabled: true
+      # AccessLogSettings:
+      #   DestinationArn:
+      #   Format: >-
+      #     {
+      #       "requestId":"$context.requestId",
+      #       "ip": "$context.identity.sourceIp",
+      #       "caller":"$context.identity.caller",
+      #       "user":"$context.identity.user",
+      #       "requestTime":"$context.requestTime",
+      #       "eventType":"$context.eventType",
+      #       "routeKey":"$context.routeKey",
+      #       "status":"$context.status",
+      #       "connectionId":"$context.connectionId"
+      #     }
+      #StageName: !Ref StageName
       DefinitionBody:
         'Fn::Transform':
           Name: AWS::Include
           Parameters:
             Location: api.yaml
-  CommentsBucket:
-    Type: AWS::S3::Bucket
 
-  ExpressBackend:
-    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+  Database:
+    Type: AWS::DynamoDB::Table
     Properties:
-      CodeUri: guestbook/
-      Handler: app.lambdaHandler
-      Runtime: nodejs12.x
-      Environment:
-        Variables:
-          BUCKET: !Ref CommentsBucket
-      Policies:
-        - S3CrudPolicy:
-            BucketName: !Ref CommentsBucket
-      Events:
-        Get:
-          Type: HttpApi # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
-          Properties:
-            Path: /
-            Method: get
-            ApiId: !Ref GuestBookApi
-        Post:
-          Type: HttpApi
-          Properties:
-            Path: /
-            Method: post
-            ApiId: !Ref GuestBookApi
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: ty
+          AttributeType: S
+      BillingMode: PAY_PER_REQUEST
+      GlobalSecondaryIndexes:
+        - IndexName: ty-sk
+          KeySchema:
+            - AttributeName: ty
+              KeyType: HASH
+            - AttributeName: sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
 
 Outputs:
   GuestBookApi:
     Description: API Gateway endpoint URL for Prod stage for Hello World function
     Value:
-      Fn::Sub: https://${GuestBookApi}.execute-api.${AWS::Region}.amazonaws.com/
-  ExpressBackendFunction:
-    Description: Express Backend Lambda Function ARN
-    Value: !Sub ExpressBackend.Arn
-  ExpressBackendIamRole:
-    Description: Implicit IAM Role created for Hello World function
-    Value: !Sub ExpressBackendFunctionRole.Arn
+      Fn::Sub: https://${Api}.execute-api.${AWS::Region}.amazonaws.com/
 

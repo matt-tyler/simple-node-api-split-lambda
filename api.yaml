@@ -13,6 +13,10 @@ paths:
             schema:
               type: string
         required: true
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/createMessage'
+      # security:
+      #   - write: []
       responses:
         "201":
           description: "Successfully created a message."
@@ -45,6 +49,10 @@ paths:
           required: false
           schema:
             type: string
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/listMessages'
+      # security:
+      #   - read: []
       responses:
         "200":
           description: "Successfully listed messages."
@@ -65,17 +73,40 @@ paths:
               schema:
                 $ref: "#/components/schemas/InternalServerErrorException"
 components:
+  x-amazon-apigateway-integrations:
+    createMessage:
+      type: aws_proxy
+      httpMethod: POST
+      uri:
+        Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PostMessageLambda.Alias}/invocations"
+      passthroughBehavior: when_no_templates
+      payloadFormatVersion: 2.0
+    listMessages:
+      type: aws_proxy
+      httpMethod: POST
+      uri:
+        Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ListMessagesLambda.Alias}/invocations"
+      passthroughBehaviour: when_no_templates
+      payloadFormatVersion: 2.0
+    deleteMessage:
+      type: aws_proxy
+      httpMethod: POST
+      uri:
+        Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DeleteMessageLambda.Alias}/invocations"
+      passthroughBehaviour: when_no_templates
+      payloadFormatVersion: 2.0
   schemas:
     Message:
       type: object
       properties:
+        id:
+          type: string
         message:
           type: string
         author:
           type: string
-        date:
-          type: string
-          format: date-time
+        time:
+          type: number
     MessageList:
       type: object
       properties:
@@ -101,3 +132,28 @@ components:
           type: string
         errorCode:
           type: string
+# securitySchemes:
+#   read:
+#     type: oauth2
+#     scopes:
+#       "read:messages": "read messages from a guestbook"
+#     x-amazon-apigateway-authorizier:
+#       type: jwt
+#       jwtConfiguration:
+#         issuer:
+#           Fn::Sub: "${Issuer}"
+#         audience: 
+#           - Fn::Sub: "${Audience}"
+#         identitySource: "$request.header.Authorization"
+#   write:
+#     type: oauth2
+#     scopes:
+#       "write:messages": "write messages to a guestbook"
+#     x-amazon-apigateway-authorizier:
+#       type: jwt
+#       jwtConfiguration:
+#         issuer:
+#           Fn::Sub: "${Issuer}"
+#         audience: 
+#           - Fn::Sub: "${Audience}"
+#         identitySource: "$request.header.Authorization"
