@@ -1,0 +1,14 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Resources:
+  HelloWorld:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: app.lambdaHandler
+      Runtime: nodejs12.x
+
+Outputs:
+  HelloWorldFunctionArn:
+    Description: API Gateway endpoint URL for Prod stage for Hello World function
+    Value: !GetAtt HelloWorld.Arn

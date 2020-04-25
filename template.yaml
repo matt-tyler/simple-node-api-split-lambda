@@ -1,99 +1,10 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: >
-  simple-node-api
-  Sample SAM Template for simple-node-api
-# Parameters:
-#   StageName:
-#     Type: String
-#   CommitId:
-#     Type: String
-#   Issuer:
-#     Type: String
-#   Audience:
-#     Type: String
-Globals:
-  Function:
-    Timeout: 3
-    Tracing: Active
-    AutoPublishAlias: live
-    # AutoPublishCodeSha256: !Ref CommitId
-    # DeploymentPreference:
-    #   Type: Canary10Percent10Minutes
-    Handler: app.lambdaHandler
-    Runtime: nodejs12.x
-    Environment:
-      Variables:
-        TABLE_NAME: !Ref Database
-        AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
 Resources:
-  PostMessageLambda:
-    Type: AWS::Serverless::Function
+  LambdaTemplate:
+    Type: AWS::Serverless::Application
     Properties:
-      CodeUri: src/postMessage/
-      Policies:
-        - DynamoDBWritePolicy:
-            TableName: !Ref Database
-
-  PostMessageLambdaPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Sub "${PostMessageLambda.Alias}"
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*/POST/"
-
-  ListMessagesLambda:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: src/listMessage/
-      Environment:
-        Variables:
-          KEY_ID: !Ref Key
-      Policies:
-        - DynamoDBReadPolicy:
-            TableName: !Ref Database
-        - KMSDecryptPolicy:
-            KeyId: !Ref Key
-        - KMSEncryptPolicy:
-            KeyId: !Ref Key
-
-  ListMessagesLambdaPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Sub "${ListMessagesLambda.Alias}"
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*/GET/"
-
-  DeleteMessageLambda:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: src/listMessage/
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref Database
-
-  DeleteMessageLambdaPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Sub "${DeleteMessageLambda.Alias}"
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*/DELETE/"
-
-  Key:
-    Type: AWS::KMS::Key
-    Properties:
-      PendingWindowInDays: 7
-      KeyPolicy:
-        Id: KeyPolicy
-        Statement:
-          - Effect: Allow
-            Principal:
-              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
-            Action: kms:*
-            Resource: "*"
+      Location: ./template-function.yaml
 
   Api:
     Type: AWS::Serverless::HttpApi
@@ -108,59 +19,22 @@ Resources:
           - HEAD
         AllowOrigins:
           - https://*
-      DefaultRouteSettings:
-        DetailedMetricsEnabled: true
-        # LoggingLevel: INFO
-        # DataTraceEnabled: true
-      # AccessLogSettings:
-      #   DestinationArn:
-      #   Format: >-
-      #     {
-      #       "requestId":"$context.requestId",
-      #       "ip": "$context.identity.sourceIp",
-      #       "caller":"$context.identity.caller",
-      #       "user":"$context.identity.user",
-      #       "requestTime":"$context.requestTime",
-      #       "eventType":"$context.eventType",
-      #       "routeKey":"$context.routeKey",
-      #       "status":"$context.status",
-      #       "connectionId":"$context.connectionId"
-      #     }
-      #StageName: !Ref StageName
       DefinitionBody:
         'Fn::Transform':
           Name: AWS::Include
           Parameters:
             Location: api.yaml
 
-  Database:
-    Type: AWS::DynamoDB::Table
+  HelloWorldLambdaPermission:
+    Type: AWS::Lambda::Permission
     Properties:
-      AttributeDefinitions:
-        - AttributeName: pk
-          AttributeType: S
-        - AttributeName: sk
-          AttributeType: S
-        - AttributeName: ty
-          AttributeType: S
-      BillingMode: PAY_PER_REQUEST
-      GlobalSecondaryIndexes:
-        - IndexName: ty-sk
-          KeySchema:
-            - AttributeName: ty
-              KeyType: HASH
-            - AttributeName: sk
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
-      KeySchema:
-        - AttributeName: pk
-          KeyType: HASH
-        - AttributeName: sk
-          KeyType: RANGE
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt LambdaTemplate.Outputs.HelloWorldFunctionArn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*/GET/"
 
 Outputs:
-  GuestBookApi:
+  Endpoint:
     Description: API Gateway endpoint URL for Prod stage for Hello World function
     Value:
       Fn::Sub: https://${Api}.execute-api.${AWS::Region}.amazonaws.com/
