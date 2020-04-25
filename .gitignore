@@ -126,6 +126,7 @@ $RECYCLE.BIN/
 *.lnk
 
 .aws-sam/
+*.sh
 
 
 # End of https://www.gitignore.io/api/osx,node,linux,windows
